@@ -47,6 +47,10 @@
     // (bool) Whether to clear the console at start
     "clear_on_start" : true,
 
+    // (bool) Whether to skip the intro section including hardware tests and such
+    // You have to have this enabled for me to be able to help you
+    "skip_intro" : false,
+
     // Actions when done
 
     // (bool) Copy text to clipboard once done
@@ -58,6 +62,6 @@
     // (bool) Send a desktop notification once done
     "send_notification" : true,
 
-    // (bool) Make a bell noise from your console window (not supported by all consoles)
+    // (bool) Make a bell noise from your terminal window (not supported by all terminal)
     "console_bell": true
 }

@@ -1,0 +1,8 @@
+{
+    "name": "cls",
+    "aliases": [
+        "clear"
+    ],
+    "short_help": "Clears the screen",
+    "long_help": "Clears the screen"
+}

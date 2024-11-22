@@ -26,6 +26,8 @@ import webbrowser, pyperclip
 from datetime import datetime
 
 from notifypy import Notify
+
+import importlib
 #endregion
 
 #region global functions
@@ -72,8 +74,9 @@ AVAILABLE_TRANSCRIPTION_MODELS = {
 with open("settings.json") as f:
     SETTINGS = json.loads(f.read())
 
-print_title("Application Settings")
-pprint(SETTINGS, indent=4)
+if(not SETTINGS["skip_intro"]):
+    print_title("Application Settings")
+    pprint(SETTINGS, indent=4)
 
 AUD_FOLDER : str = SETTINGS["audio_folder"]
 AI_FOLDER : str = "cache/ai"
@@ -132,9 +135,8 @@ def print_hw_info():
     
     return gpus[0].memoryTotal
 
-GPU_MEM = print_hw_info()
 
-def verify_settings():
+def verify_settings(GPU_MEM):
     print_title("Settings Verification")
     def check_transcription_model():
         if(SETTINGS["transcription_model"] not in AVAILABLE_TRANSCRIPTION_MODELS.keys()):
@@ -165,14 +167,19 @@ def verify_settings():
         check_setting_type("open_slite", bool)
         check_setting_type("send_notification", bool)
         check_setting_type("console_bell", bool)
+        check_setting_type("skip_intro", bool)
 
 
     verify_setting_types()
     check_transcription_model()
 
-verify_settings()
 
 def main():
+    if(not SETTINGS["skip_intro"]):
+        GPU_MEM = print_hw_info()
+        verify_settings(GPU_MEM)
+    print_title("Prootzel's Video Summarizer")
+    
     while True:
         try:
             main_loop()
@@ -180,17 +187,42 @@ def main():
             exit()
 
 def verify_url(url : str) -> bool:
+    if(url.startswith("!") or not url.startswith("https://") or not "youtube" in url):
+        return False
     return True
 
 def clean_url(url : str) -> str:
     return url
 
+def verify_command(command : str) -> bool:
+    if(command.startswith("!")):
+        return True
+    return False
+
+def handle_command(command : str):
+    command = command[1:]
+    command_with_args = command.split(" ")
+    command = command_with_args[0]
+    args = command_with_args[1:]
+    if(os.path.isfile("commands/" + command + ".json")):
+        
+        if(os.path.isfile("commands/" + command + ".py")):
+            command_module = getattr(__import__(f"commands", globals(), locals(), [command]), command)
+            command_module.run(args)
+        else:
+            print_error("Command is faulty")
+        
+    else:
+        print_error("Command not found")
+
 def main_loop():
-    print_title("Prootzel's Video Summarizer")
     while True:
         user_input = input("Enter YouTube Video URL (Ctrl + C to exit program) > ")
         if(verify_url(user_input)):
             break
+        elif(verify_command(user_input)):
+            handle_command(user_input)
+            return
     
     url = clean_url(user_input)
 

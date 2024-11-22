@@ -1,0 +1,8 @@
+{
+    "name": "help",
+    "aliases": [
+        "h"
+    ],
+    "short_help": "Prints a short help text",
+    "long_help": "Prints a short help text"
+}
