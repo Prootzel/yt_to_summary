@@ -1,0 +1,63 @@
+{
+    "settings" : "file",
+    // SETTINGS FILE
+
+    // The word in brackets describes the type of the setting(s) below
+    // (bool): either true or false
+    // (string): any sequence of letters/numbers/characters; have to be surrounded by double quotation marks (")
+    // (int): any whole number
+
+    // Every line with a variable (except the last one) needs a comma at the end
+
+
+    // File paths
+    
+    // (string) Cache folders; needs to have trailing slash and no slash at beginning; make sure the folders exist before changing this
+    "audio_folder" : "cache/audio/",
+    "transcription_folder" : "cache/transcription/",
+
+    // (string) Results folder; needs to have trailing slash and no slash at beginning; make sure the folders exist before changing this
+    "output_folder" : "output/",
+
+    // AI Parameters
+    
+    // (int) The summarization AI needs to work in multiple chunks because of model limitations; This changes how long one chunk can be
+    "max_text_chunk_size" : 4096,
+    
+    // (int) Those are the summary bounds; It's the amount of tokens (= a few characters each) in relation to the max text chunk size; formula is: max_text_chunk_size/sum_chunk_ratio
+    "min_sum_chunk_ratio" : 20,
+    "max_sum_chunk_ratio" : 8,
+
+    // AI Model choices
+
+    // (string) Level of the transcription model; choices are the following (model, estimated amount of VRAM required, projected speed):
+    // tiny, 1GB, 32x
+    // base, 1GB, 16x
+    // small, 2GB, 6x
+    // medium, 5GB, 2x
+    // large, 10GB, 1x
+    // source: https://www.jeremymorgan.com/tutorials/generative-ai/how-to-transcribe-audio/
+    "transcription_model" : "base",
+
+    // (string) What model to use as a summarization AI. Can be any model from huggingface.co which can utilise the transformers library 
+    "summarization_model" : "facebook/bart-large-cnn",
+
+    // Actions on start
+
+    // (bool) Whether to clear the console at start
+    "clear_on_start" : true,
+
+    // Actions when done
+
+    // (bool) Copy text to clipboard once done
+    "copy_to_clipboard_once_done" : true,
+    
+    // (bool) Open slite automatically when done
+    "open_slite" : false,
+
+    // (bool) Send a desktop notification once done
+    "send_notification" : true,
+
+    // (bool) Make a bell noise from your console window (not supported by all consoles)
+    "console_bell": true
+}
