@@ -18,7 +18,6 @@ import warnings
 
 from sys import exit
 
-import subprocess
 import pyjson5 as json
 
 import webbrowser, pyperclip
@@ -27,7 +26,12 @@ from datetime import datetime
 
 from notifypy import Notify
 
-import importlib
+import gui
+
+import sys
+
+from customtkinter import StringVar
+
 #endregion
 
 #region global functions
@@ -58,6 +62,74 @@ def send_notification():
 
 #endregion
 
+
+
+
+# class main_window():
+#     def __init__(self):
+#         super().__init__(parent=None)
+#         self.setWindowTitle("Prootzel's Summarizer")
+        
+#         self.setGeometry(100, 100, 1600, 900)
+        
+#         self._create_tool_bar()
+#         self._create_central_widget()
+    
+#     def _create_central_widget(self):
+#         self.central_widget = QWidget(self)
+        
+#         layout = QGridLayout(self.central_widget)
+        
+        
+        
+#         layout.addWidget(QLabel("Hello!"), 0, 0, 1, 2)
+        
+        
+#         self.input = QLineEdit()
+#         self.input.setFixedHeight(40)
+#         layout.addWidget(self.input, 1, 0)
+        
+#         self.input_send = QPushButton(QIcon("resources/icons/send-icon.svg"), "")
+#         self.input_send.setFixedSize(40, 40)
+#         layout.addWidget(self.input_send, 1, 1)
+        
+#         self.central_widget.setLayout(layout)
+#         #self.input_widget.setLayout(QHBoxLayout(self.input_widget))
+        
+#         self.setCentralWidget(self.central_widget)
+    
+#     def _create_menu(self):
+#         self.menu = self.menuBar()
+#         self.options = self.menu.addMenu("&Menu")
+#         self.options.addAction("&Exit", self.close)
+        
+#     def _create_tool_bar(self):
+#         self.tools = QToolBar()
+#         self.tools.addAction("Wawa", self.close)
+        
+#         spacer = QWidget()
+#         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+#         self.tools.addWidget(spacer)
+        
+#         settings_icon = QIcon("resources/icons/setting-icon.svg")
+        
+#         self.tools.addAction(settings_icon, "", self.close).setToolTip("Settings")
+        
+#         self.tools.setMovable(False)
+#         self.tools.setFixedWidth(50)
+#         self.tools.setStyleSheet("QToolButton {padding-top: 5px; padding-bottom: 20px;}")
+#         self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, self.tools)
+    
+#     def _create_status_bar(self):
+#         self.status = QStatusBar()
+#         self.status.showMessage("Ready")
+#         self.setStatusBar(self.status)
+        
+#     def set_status(self, status : str):
+#         self.status.showMessage(status)
+        
+    
+
 #region constants
 TERMINAL_WIDTH = os.get_terminal_size().columns
 
@@ -68,6 +140,10 @@ AVAILABLE_TRANSCRIPTION_MODELS = {
     "medium" : 5,
     "large" : 10
 }
+#endregion
+
+#region GUI
+
 #endregion
 
 #region load settings
@@ -90,6 +166,8 @@ TRANSCRIPTION_MODEL = whisper.load_model(SETTINGS["transcription_model"])
 SUMMARIZATION_MODEL = pipeline("summarization", SETTINGS["summarization_model"])
 
 #endregion
+
+
 
 def print_hw_info():
     def get_size(bytes, suffix="B"):
@@ -223,7 +301,10 @@ def main_loop():
         elif(verify_command(user_input)):
             handle_command(user_input)
             return
-    
+        
+    download_and_sum_url(user_input)
+
+def download_and_sum_url(user_input):
     url = clean_url(user_input)
 
     video_name = fetch_video(url)
@@ -341,4 +422,25 @@ def summarize_chunk(text : str) -> str:
     
     return SUMMARIZATION_MODEL(text, max_length = max_length, min_length = min_length)
 
-main()
+window = gui.Window("Summarizer", "1600x900")
+
+#toolbar = tk.Frame(window)
+#toolbar.grid(row=0, column=0, sticky=tk.W)
+#_icon = tk.PhotoImage(file="resources/icons/setting-icon.png")
+options = gui.Button(window, text="", icon_name="setting-icon.png", command=print)
+options.grid(row=0, column=0)
+
+def input_callback():
+    user_input = input_var.get()
+    if(verify_url(user_input)):
+        download_and_sum_url(user_input)
+    elif(verify_command(user_input)):
+        handle_command(user_input)
+        return
+
+input_var = StringVar(window)
+
+inputbox = gui.InputBox(window, "Hello, world!", input_var, input_callback)
+inputbox.grid(row=1, column=0)
+
+sys.exit(window.mainloop())
