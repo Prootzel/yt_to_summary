@@ -32,6 +32,13 @@ import sys
 
 from customtkinter import StringVar
 
+from util_classes import YTSummary
+
+from threading import Thread
+
+import json as basic_json
+
+import subprocess
 #endregion
 
 #region global functions
@@ -156,6 +163,7 @@ if(not SETTINGS["skip_intro"]):
 
 AUD_FOLDER : str = SETTINGS["audio_folder"]
 AI_FOLDER : str = "cache/ai"
+OUTPUT_FOLDER = SETTINGS["output_folder"]
 
 MAX_TEXT_CHUNK_SIZE = SETTINGS["max_text_chunk_size"]
 MIN_SUM_CHUNK_RATIO = SETTINGS["min_sum_chunk_ratio"]
@@ -213,6 +221,18 @@ def print_hw_info():
     
     return gpus[0].memoryTotal
 
+def load_chats() -> list[YTSummary]:
+    chats = []
+    
+    for filename in os.listdir(OUTPUT_FOLDER):
+        if(not filename.endswith(".json")):
+            continue
+        with open(OUTPUT_FOLDER + filename, "r") as f:
+            content = basic_json.loads(f.read())
+        
+        chats.append(YTSummary(**content))
+    
+    return chats
 
 def verify_settings(GPU_MEM):
     print_title("Settings Verification")
@@ -307,9 +327,17 @@ def main_loop():
 def download_and_sum_url(user_input):
     url = clean_url(user_input)
 
-    video_name = fetch_video(url)
+    video_info = fetch_video(url)
+    try:
+        video_name = video_info["name"]
+        video_channel = video_info["channel"]
+    except:
+        video_name = video_info[:-4]
+        video_channel = "undefined"
     
-    result_path = video_name + ".m4a"
+        
+    
+    result_path = clean_file_name(video_name)
     
     trans_path = SETTINGS["transcription_folder"] + result_path + "_transcription.txt"
 
@@ -335,20 +363,21 @@ def download_and_sum_url(user_input):
         print(f"Transcription saved to './{trans_path}'")
 
     print("Starting summary...")
-    _linesep = "=" * 40
-    summary_header = [
-        f"@{datetime.now()}",
-        f"Title: {video_name}",
-        f"URL: {url}",
-        _linesep,
-        ""
-    ]
+    
+    summary = {
+        "time": f"{datetime.now()}",
+        "title": video_name,
+        "url": url,
+        "channel": video_channel
+    }
 
-    summary = summarize(transcription, summary_header)
+    summary_content = summarize(transcription)
+    
+    summary |= {"content": summary_content}
 
 
-    with open(SETTINGS["output_folder"] + video_name + ".txt", "w") as file:
-        file.write(summary)
+    with open(SETTINGS["output_folder"] + clean_file_name(video_name) + ".json", "w") as file:
+        basic_json.dump(summary, file, indent=4)
 
     print("Done")
     print()
@@ -366,12 +395,14 @@ def download_and_sum_url(user_input):
         send_notification()
     if(SETTINGS["console_bell"]):
         bell()
+    load_chats()
+    update_chat_buttons()
 
 
 def clean_file_name(string : str) -> str:
-    return re.sub('[ /><:"|\\?\*,]', "_", string).replace(".", "")
+    return re.sub(r'[ /><:"|\\?\*,]', "_", string).replace(".", "")
 
-def fetch_video(url) -> str:
+def fetch_video(url) -> dict:
     vid = YouTube(url)
     audio_download = vid.streams.get_audio_only()
 
@@ -389,58 +420,198 @@ def fetch_video(url) -> str:
 
     print("Download Completed")
     
-    return filename
+    return {
+        "name" : entry,
+        "channel" : vid.channel_id
+    }
 
 def transcribe(file_path : str) -> str:
     result = TRANSCRIPTION_MODEL.transcribe(file_path, fp16 = False)
     return result["text"]
 
-def summarize(text : str, header : list[str]) -> str:
+def summarize(text : str) -> str:
     num_chunks = ceil(len(text)/(MAX_TEXT_CHUNK_SIZE*.9))
     chunk_divider = round(MAX_TEXT_CHUNK_SIZE * .9)
     
     num_digits = len(str(chunk_divider*MAX_TEXT_CHUNK_SIZE))
     
-    sum_chunks = header.copy()
+    
+    threads = [None] * num_chunks
+    results = [None] * num_chunks
     
     for i in range(num_chunks):
         cur_chunk_index = chunk_divider * i
         next_chunk_index = min(chunk_divider * (i+1), len(text)-1)
         
-        chunk_summary = summarize_chunk(text[cur_chunk_index:next_chunk_index])[0]["summary_text"]
         
-        sum_chunks.append(chunk_summary)
+        threads[i] = Thread(target=lambda: summarize_chunk(text[cur_chunk_index:next_chunk_index], results, i))
+        threads[i].start()
         
-        print(f"({f'{cur_chunk_index}'.rjust(num_digits)} | {f'{next_chunk_index}'.rjust(num_digits)}): {chunk_summary[0:190] + '...' if len(chunk_summary) > 49 else chunk_summary}")
-        
-    return "\n".join(sum_chunks)
+        #print(f"({f'{cur_chunk_index}'.rjust(num_digits)} | {f'{next_chunk_index}'.rjust(num_digits)}): {chunk_summary[0:190] + '...' if len(chunk_summary) > 49 else chunk_summary}")
+    
+    for t in threads:
+        t.join()
+    
+    return "\n".join(results)
 
-def summarize_chunk(text : str) -> str:
+def summarize_chunk(text : str, outputlist, index):
     chunk_size = len(text)
     max_length = chunk_size//MAX_SUM_CHUNK_RATIO
     min_length = chunk_size//MIN_SUM_CHUNK_RATIO
     
-    return SUMMARIZATION_MODEL(text, max_length = max_length, min_length = min_length)
+    outputlist[index] = SUMMARIZATION_MODEL(text, max_length = max_length, min_length = min_length)[0]["summary_text"]
 
 window = gui.Window("Summarizer", "1600x900")
 
 #toolbar = tk.Frame(window)
 #toolbar.grid(row=0, column=0, sticky=tk.W)
 #_icon = tk.PhotoImage(file="resources/icons/setting-icon.png")
-options = gui.Button(window, text="", icon_name="setting-icon.png", command=print)
-options.grid(row=0, column=0)
+#options = gui.Button(window, text="", icon_name="setting-icon.png", command=print)
 
-def input_callback():
-    user_input = input_var.get()
+def input_callback(user_input):
     if(verify_url(user_input)):
         download_and_sum_url(user_input)
+        load_chats()
+        update_chat_buttons()
     elif(verify_command(user_input)):
         handle_command(user_input)
         return
+    
+def start_callback(user_input):
+    Thread(target=input_callback, args=[user_input]).start()
+
+def open_settings():
+    gui.PopUp("Not available")
+
+chatbar = gui.ScrollableFrame(window, "#2B2A2A", 50, 0, 330, 900)
+chatbar.grid_propagate(flag=False)
+chatbar.lower()
+
+chats = load_chats()
+chat_buttons = []
+def update_chat_buttons():
+    for btn in chat_buttons:
+        btn.destroy()
+    for i, chat in enumerate(chats):
+        if(len(chat.title)>30):
+            title = chat.title[:42] + "..."
+        else:
+            title = chat.title
+        
+        
+        button = gui.Button(
+            chatbar, title, None, lambda i=i:change_chat(i), 280, 30
+        )
+        
+        button.grid(row=i, column = 0, padx = 40, pady = 5)
+        chat_buttons.append(button)
+
+def new_yt_summary():
+    for ui in current_overlay_ui:
+        ui.destroy()
+    
+    inputbox_overlay.place(x=100000, y=0)
+    inputbox.configure(state = "normal")
+    output_label.set_text("Enter link below")
+
+update_chat_buttons()
+
+
+inputbox_overlay = gui.Frame(window, "transparent", 420, 814, 1140, 53, 20)
+current_overlay_ui = []
+
+
+
+
+def change_chat(i):
+    for ui in current_overlay_ui:
+        ui.destroy()
+    
+    cur_chat = chats[i]
+    print(f"Changed to chat {i}")
+    output_label.set_text(chats[i].content.replace("\n", "\n\n"))
+    
+    
+    
+    
+    if(cur_chat.type == "YTSummary"):
+        inputbox_overlay.grid_propagate(False)
+        inputbox_overlay.columnconfigure(0, weight=0)
+        inputbox_overlay.columnconfigure(1, weight=1)
+        print("Detected Summary")
+        inputbox_overlay.configure(fg_color = "#5C006B")
+        inputbox_overlay.lift(inputbox)
+        
+        description = f"by {cur_chat.channel} (@{cur_chat.time})"
+        description = description if len(description) < 70 else f"by {cur_chat.channel[:70-len(description)]} (@{cur_chat.time})"
+        
+        title = cur_chat.title if len(cur_chat.title) < 70 else cur_chat.title[:70]
+        title_label = gui.TextLabel(inputbox_overlay, cur_chat.title, None, None, 30)
+        info_label = gui.TextLabel(inputbox_overlay, description)
+        
+        current_overlay_ui.append(title_label)
+        current_overlay_ui.append(info_label)
+        
+        def open_in_browser(url):
+            webbrowser.open(url)
+        
+        def open_in_editor(fp):
+            subprocess.call(["notepad.exe", fp])
+        
+        url = cur_chat.url
+        open_url_button = gui.Button(inputbox_overlay, "Open in Browser", None, lambda url=url:open_in_browser(url), 280, 30)
+        current_overlay_ui.append(open_url_button)
+        
+        fp = SETTINGS["output_folder"] + clean_file_name(cur_chat.title) + ".json"
+        open_json_button = gui.Button(inputbox_overlay, "Open in Text Editor", None, lambda fp=fp:Thread(target=open_in_editor(fp)).start(), 280, 30)
+        current_overlay_ui.append(open_json_button)
+        
+        
+        title_label.grid(row=0, column=0)
+        info_label.grid(row=1, column=0)
+        
+        open_url_button.grid(row=0, column=1, sticky="e", padx=50)
+        open_json_button.grid(row=1, column=1, sticky="e", padx=50)
+        
+        inputbox.configure(state = "disabled")
+    
+    else:
+        inputbox.configure(state = "normal")
+        inputbox.lift(inputbox_overlay)
+    
+    
+    for cur_index, button in enumerate(chat_buttons):
+        if(cur_index == i):
+            button.can_change_state = False
+            button.configure(fg_color = "#5C006B")
+        else:
+            button.can_change_state = True
+            button.configure(fg_color = gui.BUTTON_COLOR)
 
 input_var = StringVar(window)
 
-inputbox = gui.InputBox(window, "Hello, world!", input_var, input_callback)
-inputbox.grid(row=1, column=0)
+inputbox = gui.InputBox(window, "Hello, world!", input_var, start_callback, height=53)
+inputbox.place(x=420, y=814, relwidth = 1140/1600)
+
+toolbar = gui.Frame(window, "#1E1E1E", x=0, y=0, width=80, height=900, corner_radius=0)
+
+# Not there yet...
+#settings_button = gui.Button(window, "", command=open_settings, icon_name="setting-icon.png", width=70, height=70)
+#settings_button.place(x=5, y=820)
+
+add_button = gui.Button(window, "+", None, command=new_yt_summary, width=70, height=70)
+add_button.place(x=5, y=740)
+
+with open("lorem_ipsum.txt") as f:
+    lorem = f.read()
+
+output_frame = gui.ScrollableFrame(window, "transparent", x=420, y=40, width=1440, height=750, corner_radius=0)
+output_frame.place(x=420, y=40)
+
+output_label = gui.TextLabel(output_frame, lorem, width=1140, height=750)
+output_label.grid(row=0, column=0)
+
+if len(chat_buttons) > 0:
+    change_chat(0)
 
 sys.exit(window.mainloop())

@@ -49,7 +49,7 @@
 
     // (bool) Whether to skip the intro section including hardware tests and such
     // You have to have this enabled for me to be able to help you
-    "skip_intro" : false,
+    "skip_intro" : true,
 
     // Actions when done
 
